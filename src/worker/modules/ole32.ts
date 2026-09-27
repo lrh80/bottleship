@@ -30,10 +30,19 @@ const CO_E_NOTLOADED = 0x800401f0;
  * so expose a real COM object with the standard IUnknown methods.
  */
 const IID_DIRECTMUSIC = "6536115a-7b2d-11d2-ba18-0000f875ac12";
+const IID_DIRECTMUSIC2 = "6fc2cae1-bc78-11d2-afa6-00aa0024d8b6";
+const IID_DIRECTMUSIC8 = "2d3629f7-813d-4939-8508-f05c6b75fd97";
 
 class DirectMusicCompatibilityObject extends BaseComObject {
     constructor(vtableAddress: number) {
         super(IID_DIRECTMUSIC, vtableAddress);
+    }
+
+    protected queryAdditionalInterfaces(riid: string): string | null {
+        if (riid === IID_DIRECTMUSIC2 || riid === IID_DIRECTMUSIC8) {
+            return riid;
+        }
+        return null;
     }
 
     protected destroy(): void {
@@ -52,6 +61,7 @@ export class Ole32 implements IModule {
     exports: Record<string, ThunkImplementation> = {};
     private process!: Process;
     private iunknownStubs: { QueryInterface: number; AddRef: number; Release: number } | null = null;
+    private directMusicVtableAddr = 0;
     private guidState = 0xa341316c;
     private guidCounter = 1;
     private blowfishInstances: Map<number, BlowfishState> = new Map(); // objAddr -> state
@@ -71,10 +81,66 @@ export class Ole32 implements IModule {
 
         // Register standard DirectX interfaces
         registerStandardDirectXInterfaces();
-        ComObjectFactory.register("6536115a-7b2d-11d2-ba18-0000f875ac12", DirectMusicCompatibilityObject);
+        ComObjectFactory.register(IID_DIRECTMUSIC, DirectMusicCompatibilityObject);
+        ComObjectFactory.register(IID_DIRECTMUSIC2, DirectMusicCompatibilityObject);
+        ComObjectFactory.register(IID_DIRECTMUSIC8, DirectMusicCompatibilityObject);
 
         // Create universal IUnknown stubs that can be used by any COM object
         this.createIUnknownStubs();
+
+        // DirectMusic compatibility vtable. I.G.I. calls DirectMusic methods during
+        // startup, so slots beyond IUnknown must point at valid COM thunks.
+        const directMusicHandlers: Record<string, ThunkImplementation> = {
+            EnumPort: () => 0x80004001,
+            CreateMusicBuffer: (ctx, mem, args) => {
+                if (args[2]) Mem.writeUint32(args[2] >>> 0, 0);
+                return 0x80004001;
+            },
+            CreatePort: (ctx, mem, args) => {
+                if (args[3]) Mem.writeUint32(args[3] >>> 0, 0);
+                return 0x80004001;
+            },
+            EnumMasterClock: () => 0x80004001,
+            GetMasterClock: (ctx, mem, args) => {
+                if (args[2]) Mem.writeUint32(args[2] >>> 0, 0);
+                return 0x80004001;
+            },
+            SetMasterClock: () => 0x80004001,
+            Activate: () => 0x80004001,
+            GetDefaultPort: () => 0x80004001,
+            SetDirectSound: () => 0x80004001,
+            SetExternalMasterClock: () => 0x80004001,
+        };
+
+        const directMusicMethods: ComVtableMethod[] = [
+            { name: "EnumPort", argCount: 3, stackCleanupBytes: 12 },
+            { name: "CreateMusicBuffer", argCount: 4, stackCleanupBytes: 16 },
+            { name: "CreatePort", argCount: 5, stackCleanupBytes: 20 },
+            { name: "EnumMasterClock", argCount: 3, stackCleanupBytes: 12 },
+            { name: "GetMasterClock", argCount: 3, stackCleanupBytes: 12 },
+            { name: "SetMasterClock", argCount: 2, stackCleanupBytes: 8 },
+            { name: "Activate", argCount: 2, stackCleanupBytes: 8 },
+            { name: "GetDefaultPort", argCount: 2, stackCleanupBytes: 8 },
+            { name: "SetDirectSound", argCount: 3, stackCleanupBytes: 12 },
+            { name: "SetExternalMasterClock", argCount: 2, stackCleanupBytes: 8 },
+        ];
+        const installedDirectMusic = installComVtable(process, {
+            moduleName: "ole32_directmusic",
+            methods: directMusicMethods,
+            handlers: directMusicHandlers,
+            logLabel: "DirectMusic",
+        });
+        if (installedDirectMusic && this.iunknownStubs) {
+            const vtable = process.memory.alloc(13 * 4, "THUNK_DATA", "rw");
+            Mem.writeUint32(vtable, this.iunknownStubs.QueryInterface);
+            Mem.writeUint32(vtable + 4, this.iunknownStubs.AddRef);
+            Mem.writeUint32(vtable + 8, this.iunknownStubs.Release);
+            for (let slot = 0; slot < directMusicMethods.length; slot++) {
+                const stub = installedDirectMusic.exportTable.get(directMusicMethods[slot].name.toLowerCase()) ?? 0;
+                Mem.writeUint32(vtable + (slot + 3) * 4, stub);
+            }
+            this.directMusicVtableAddr = vtable;
+        }
 
         // CoInitialize - initialize COM library
         this.exports["CoInitialize"] = (ctx, mem, args) => {
@@ -853,6 +919,12 @@ export class Ole32 implements IModule {
                 return 0x80004002;
             }
             vtableAddr = specificVtable.address;
+        } else if (mapping.moduleName === "ole32" && mapping.className === "DirectMusicCompatibilityObject") {
+            if (!this.directMusicVtableAddr) {
+                if (ppv) view.setUint32(ppv, 0, true);
+                return REGDB_E_CLASSNOTREG;
+            }
+            vtableAddr = this.directMusicVtableAddr;
         } else if (mapping.moduleName === "quartz") {
             const quartzMod = this.process.modules.get("quartz") as { vtables?: Record<string, { address: number }> } | undefined;
             const specificVtable = quartzMod?.vtables?.[mapping.className];
