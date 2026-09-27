@@ -21,6 +21,20 @@ const E_POINTER = 0x80004003;
 const E_INVALIDARG = 0x80070057;
 const CO_E_NOTLOADED = 0x800401f0;
 
+/**
+ * Minimal DirectMusic COM compatibility object.
+ *
+ * Legacy DirectX games commonly CoCreateInstance(CLSID_DirectMusic) during
+ * startup only to verify that the DirectMusic runtime is present. BottleShip
+ * does not need to emulate the full DirectMusic audio engine for that probe,
+ * so expose a real COM object with the standard IUnknown methods.
+ */
+class DirectMusicCompatibilityObject extends BaseComObject {
+    constructor(iid: string, vtableAddress: number) {
+        super(iid, vtableAddress);
+    }
+}
+
 // BLOWFISH.DLL IBlockCipher::Submit_Key — stdcall, max 56-byte key (Ghidra @ 0x11002011)
 const BF_MAX_KEY_LEN = 0x38;
 
@@ -51,6 +65,7 @@ export class Ole32 implements IModule {
 
         // Register standard DirectX interfaces
         registerStandardDirectXInterfaces();
+        ComObjectFactory.register("6536115a-7b2d-11d2-ba18-0000f875ac12", DirectMusicCompatibilityObject);
 
         // Create universal IUnknown stubs that can be used by any COM object
         this.createIUnknownStubs();
