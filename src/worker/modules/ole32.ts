@@ -112,10 +112,12 @@ export class Ole32 implements IModule {
             SetExternalMasterClock: () => 0x80004001,
         };
 
+        // IDirectMusic vtable order must exactly match the native interface.
+        // The first three slots are IUnknown; these are the ten IDirectMusic methods
+        // in declaration order. A wrong order here gives a thunk the wrong stack
+        // cleanup size and corrupts the guest return address.
         const directMusicMethods: ComVtableMethod[] = [
             { name: "EnumPort", argCount: 3, stackCleanupBytes: 12 },
-            { name: "CreateMusicBuffer", argCount: 4, stackCleanupBytes: 16 },
-            { name: "CreatePort", argCount: 5, stackCleanupBytes: 20 },
             { name: "EnumMasterClock", argCount: 3, stackCleanupBytes: 12 },
             { name: "GetMasterClock", argCount: 3, stackCleanupBytes: 12 },
             { name: "SetMasterClock", argCount: 2, stackCleanupBytes: 8 },
@@ -123,6 +125,8 @@ export class Ole32 implements IModule {
             { name: "GetDefaultPort", argCount: 2, stackCleanupBytes: 8 },
             { name: "SetDirectSound", argCount: 3, stackCleanupBytes: 12 },
             { name: "SetExternalMasterClock", argCount: 2, stackCleanupBytes: 8 },
+            { name: "CreateMusicBuffer", argCount: 4, stackCleanupBytes: 16 },
+            { name: "CreatePort", argCount: 5, stackCleanupBytes: 20 },
         ];
         const installedDirectMusic = installComVtable(process, {
             moduleName: "ole32_directmusic",
