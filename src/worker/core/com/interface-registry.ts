@@ -209,6 +209,15 @@ export function registerStandardDirectXInterfaces(): void {
         supportedInterfaces: ["00000000-0000-0000-C000-000000000046", "15e65ec0-3b9c-11d2-b92f-00c04fc2c602"]
     });
     
+    // DirectMusic compatibility interface. Legacy DirectX 7-era games may
+    // instantiate CLSID_DirectMusic simply to verify the runtime is present.
+    registry.register({
+        iid: "6536115a-7b2d-11d2-ba18-0000f875ac12", // IID_IDirectMusic
+        className: "DirectMusicCompatibilityObject",
+        moduleName: "ole32",
+        supportedInterfaces: ["00000000-0000-0000-C000-000000000046"]
+    });
+
     // DirectInput interfaces
     registry.register({
         iid: "89521360-AA8A-11CF-BFC7-444553540000", // IDirectInputA
