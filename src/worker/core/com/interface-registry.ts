@@ -215,7 +215,31 @@ export function registerStandardDirectXInterfaces(): void {
         iid: "6536115a-7b2d-11d2-ba18-0000f875ac12", // IID_IDirectMusic
         className: "DirectMusicCompatibilityObject",
         moduleName: "ole32",
-        supportedInterfaces: ["00000000-0000-0000-C000-000000000046"]
+        supportedInterfaces: [
+            "00000000-0000-0000-C000-000000000046",
+            "6fc2cae1-bc78-11d2-afa6-00aa0024d8b6",
+            "2d3629f7-813d-4939-8508-f05c6b75fd97"
+        ]
+    });
+    registry.register({
+        iid: "6fc2cae1-bc78-11d2-afa6-00aa0024d8b6", // IID_IDirectMusic2
+        className: "DirectMusicCompatibilityObject",
+        moduleName: "ole32",
+        supportedInterfaces: [
+            "00000000-0000-0000-C000-000000000046",
+            "6536115a-7b2d-11d2-ba18-0000f875ac12",
+            "2d3629f7-813d-4939-8508-f05c6b75fd97"
+        ]
+    });
+    registry.register({
+        iid: "2d3629f7-813d-4939-8508-f05c6b75fd97", // IID_IDirectMusic8
+        className: "DirectMusicCompatibilityObject",
+        moduleName: "ole32",
+        supportedInterfaces: [
+            "00000000-0000-0000-C000-000000000046",
+            "6536115a-7b2d-11d2-ba18-0000f875ac12",
+            "6fc2cae1-bc78-11d2-afa6-00aa0024d8b6"
+        ]
     });
 
     // DirectInput interfaces
