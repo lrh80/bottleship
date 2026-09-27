@@ -29,9 +29,15 @@ const CO_E_NOTLOADED = 0x800401f0;
  * does not need to emulate the full DirectMusic audio engine for that probe,
  * so expose a real COM object with the standard IUnknown methods.
  */
+const IID_DIRECTMUSIC = "6536115a-7b2d-11d2-ba18-0000f875ac12";
+
 class DirectMusicCompatibilityObject extends BaseComObject {
-    constructor(iid: string, vtableAddress: number) {
-        super(iid, vtableAddress);
+    constructor(vtableAddress: number) {
+        super(IID_DIRECTMUSIC, vtableAddress);
+    }
+
+    protected destroy(): void {
+        // No native DirectMusic resources are allocated by this compatibility object.
     }
 }
 
