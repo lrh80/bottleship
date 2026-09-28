@@ -1,5 +1,6 @@
 name: CI
 
+# CI trigger check
 on:
   push:
     branches: [main, master]
@@ -19,26 +20,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
       - name: Generate module indexes
         run: bun tools/generate-index.ts
-
       - name: Validate API signatures
         run: bun tools/validate-signatures.ts
-
       - name: Validate struct offsets
         run: bun tools/validate-struct-offsets.ts
-
       - name: Typecheck
         run: bun run typecheck
-
       - name: Unit tests
         run: bun test
 
@@ -51,14 +45,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
       - name: Copy/paste detector (jscpd)
         run: >
           bunx jscpd src
@@ -66,6 +57,5 @@ jobs:
           --reporters consoleFull
           --ignore "**/*.generated.ts,**/index.ts"
           --threshold 100
-
       - name: Dead exports (ts-prune)
         run: bunx ts-prune -p tsconfig.json || true
