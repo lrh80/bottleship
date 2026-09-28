@@ -88,18 +88,67 @@ export class Ole32 implements IModule {
         // Create universal IUnknown stubs that can be used by any COM object
         this.createIUnknownStubs();
 
-        // DirectMusic compatibility object.
-        // I.G.I. uses CoCreateInstance(CLSID_DirectMusic) as a startup
-        // capability probe. Keep this deliberately minimal: IUnknown is enough
-        // for the probe and avoids installing a second set of method thunks before
-        // the guest has even used the returned object.
-        if (this.iunknownStubs) {
-            const vtable = process.memory.alloc(3 * 4, "THUNK_DATA", "rw");
+        // DirectMusic compatibility vtable.
+        // I.G.I. creates IDirectMusic and immediately expects a real COM vtable.
+        // A three-slot IUnknown-only table is unsafe: any EnumPort/CreatePort/etc.
+        // call reads past the allocation and can jump into arbitrary memory.
+        const directMusicHandlers: Record<string, ThunkImplementation> = {
+            EnumPort: () => 0x80004001,
+            CreateMusicBuffer: (ctx, mem, args) => {
+                if (args[2]) Mem.writeUint32(args[2] >>> 0, 0);
+                return 0x80004001;
+            },
+            CreatePort: (ctx, mem, args) => {
+                if (args[3]) Mem.writeUint32(args[3] >>> 0, 0);
+                return 0x80004001;
+            },
+            EnumMasterClock: () => 0x80004001,
+            GetMasterClock: (ctx, mem, args) => {
+                if (args[2]) Mem.writeUint32(args[2] >>> 0, 0);
+                return 0x80004001;
+            },
+            SetMasterClock: () => 0x80004001,
+            Activate: () => 0x80004001,
+            GetDefaultPort: () => 0x80004001,
+            SetDirectSound: () => 0x80004001,
+            SetExternalMasterClock: () => 0x80004001,
+        };
+
+        // IDirectMusic vtable order from dmusicc.h:
+        // IUnknown + EnumPort, CreateMusicBuffer, CreatePort, EnumMasterClock,
+        // GetMasterClock, SetMasterClock, Activate, GetDefaultPort, SetDirectSound.
+        // IDirectMusic8 adds SetExternalMasterClock as the final slot.
+        const directMusicMethods: ComVtableMethod[] = [
+            { name: "EnumPort", argCount: 3, stackCleanupBytes: 12 },
+            { name: "CreateMusicBuffer", argCount: 4, stackCleanupBytes: 16 },
+            { name: "CreatePort", argCount: 5, stackCleanupBytes: 20 },
+            { name: "EnumMasterClock", argCount: 3, stackCleanupBytes: 12 },
+            { name: "GetMasterClock", argCount: 3, stackCleanupBytes: 12 },
+            { name: "SetMasterClock", argCount: 2, stackCleanupBytes: 8 },
+            { name: "Activate", argCount: 2, stackCleanupBytes: 8 },
+            { name: "GetDefaultPort", argCount: 2, stackCleanupBytes: 8 },
+            { name: "SetDirectSound", argCount: 3, stackCleanupBytes: 12 },
+            { name: "SetExternalMasterClock", argCount: 2, stackCleanupBytes: 8 },
+        ];
+
+        const installedDirectMusic = installComVtable(process, {
+            moduleName: "ole32_directmusic",
+            methods: directMusicMethods,
+            handlers: directMusicHandlers,
+            logLabel: "DirectMusic",
+        });
+
+        if (installedDirectMusic && this.iunknownStubs) {
+            const vtable = process.memory.alloc(13 * 4, "THUNK_DATA", "rw");
             Mem.writeUint32(vtable, this.iunknownStubs.QueryInterface);
             Mem.writeUint32(vtable + 4, this.iunknownStubs.AddRef);
             Mem.writeUint32(vtable + 8, this.iunknownStubs.Release);
+            for (let slot = 0; slot < directMusicMethods.length; slot++) {
+                const stub = installedDirectMusic.exportTable.get(directMusicMethods[slot].name.toLowerCase()) ?? 0;
+                Mem.writeUint32(vtable + (slot + 3) * 4, stub);
+            }
             this.directMusicVtableAddr = vtable;
-            Logger.log(LogCategory.COM, `DirectMusic compatibility vtable at 0x${vtable.toString(16)} (IUnknown-only probe)`);
+            Logger.log(LogCategory.COM, `DirectMusic compatibility vtable at 0x${vtable.toString(16)} (full IDirectMusic/8)`);
         }
 
         // CoInitialize - initialize COM library
