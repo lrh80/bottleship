@@ -1,6 +1,7 @@
 import { ModuleDescriptor, calculateStackCleanup } from "../api/types";
 import { setupapiModule } from "../api/setupapi.api";
 import { kernel32VistaSupplement } from "../api/kernel32-vista-supplement";
+import { msvfw32Module } from "../api/msvfw32.api";
 import { REFERENCE_ARG_COUNTS } from "../reference-argcounts.generated";
 import { Logger, LogCategory } from "./logger";
 
@@ -73,6 +74,8 @@ export class APIRegistry {
         // Static imports for modules added after the last Vite glob scan (import.meta.glob
         // is fixed at compile time — new *.api.ts files are invisible until rebuild).
         this.registerModule(setupapiModule);
+        // Explicitly register msvfw32 so production builds cannot omit the legacy Video for Windows descriptor.
+        this.registerModule(msvfw32Module);
 
         try {
             const apiModules = import.meta.glob('../api/*.api.ts', { eager: true });
